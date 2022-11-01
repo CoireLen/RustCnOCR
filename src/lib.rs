@@ -50,21 +50,21 @@ pub mod Ocr{
         }
     }
     pub trait OcrTraitConst {
-        fn from_mat(&self,imgdata:opencv::core::Mat)->Vec<String>;
-        fn from_path(&self,path:String)->Vec<String>;
-        fn ocr_for_single_lines(&self,inimgs:Vec<opencv::core::Mat>)->Vec<String>;
+        fn from_mat(&self,imgdata:opencv::core::Mat)->Vec<(String,f32)>;
+        fn from_path(&self,path:String)->Vec<(String,f32)>;
+        fn ocr_for_single_lines(&self,inimgs:Vec<opencv::core::Mat>)->Vec<(String,f32)>;
         fn line_split(&self,inimg:opencv::core::Mat)->Vec<opencv::core::Mat>;
         fn ctc_best(&self,data:Vec<usize>)->String;
     }
     impl OcrTraitConst for ocr{
-        fn from_mat(&self,imgdata:opencv::core::Mat)->Vec<String>{
+        fn from_mat(&self,imgdata:opencv::core::Mat)->Vec<(String,f32)>{
             use opencv::prelude::MatTraitConst;
             use opencv::core::prelude::*;
             let mut outimg=opencv::core::Mat::default();
             if let Err(_)=opencv::imgproc::cvt_color(&imgdata, &mut outimg,opencv::imgproc::COLOR_RGB2GRAY,0){
                 assert!(false,"From_mat.cvt_color(imgdata,outimg) faild");
             }
-            let mut res:Vec<String>=Vec::new();
+            let mut res:Vec<(String,f32)>=Vec::new();
             let imgcol=outimg.cols();
             let imgrow=outimg.rows();
             if std::cmp::min(imgcol,imgrow)<2{
@@ -80,13 +80,13 @@ pub mod Ocr{
             res=self.ocr_for_single_lines(imgs);
             res
         }
-        fn from_path(&self,path:String)->Vec<String>{
+        fn from_path(&self,path:String)->Vec<(String,f32)>{
             use opencv::prelude::MatTraitConst;
             let inimg =opencv::imgcodecs::imread(path.as_str(), opencv::imgcodecs::IMREAD_COLOR).unwrap();
             return self.from_mat(inimg);
         }
-        fn  ocr_for_single_lines(&self,inimgs:Vec<opencv::core::Mat>)->Vec<String>{
-            let mut res:Vec<String>=Vec::new();
+        fn  ocr_for_single_lines(&self,inimgs:Vec<opencv::core::Mat>)->Vec<(String,f32)>{
+            let mut res:Vec<(String,f32)>=Vec::new();
             if inimgs.len()==0{
                 return res;
             }
@@ -131,11 +131,15 @@ pub mod Ocr{
                 //    }
                 //}
                 let mut max=0.0;
-                let mut sum=0.0;
+                let mut min=0.0;
+                //let mut sum=0.0;
                 let data:&[f32]=matdata.data_typed().unwrap();
                 for i in data{
                     if *i>max{
                         max=*i;
+                    }
+                    if *i<min{
+                        min=*i;
                     }
                 }
                 let mut tmpmat=opencv::core::Mat::default();
@@ -163,8 +167,20 @@ pub mod Ocr{
                     }
                     resvec.push(maxvaluelocal);
                 }
+                //准确率
+                let mut maxmat=opencv::core::Mat::default();
+                let mut minmat=opencv::core::Mat::default();
+                let one=opencv::core::Mat::ones(matdata.rows(), matdata.cols(), matdata.typ()).unwrap().to_mat().unwrap();
+                if let opencv::core::MatExprResult::Ok(x)=(matdata.clone()+(min.abs() as f64)*one.clone())/(((max+min.abs()) as f64)*one.clone()){
+                    maxmat=x.to_mat().unwrap();
+                }
+                
+                opencv::core::reduce(&maxmat, &mut minmat, 1, opencv::core::REDUCE_MIN, -1).unwrap();
+                
                 //匹配数据ctcbest
-                res.push(self.ctc_best(resvec));
+                let retstr=self.ctc_best(resvec);
+                let min2d:&[f32]=minmat.data_typed().unwrap();
+                res.push((retstr,min2d[0]));
             }
            
             res
