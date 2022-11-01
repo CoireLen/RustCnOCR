@@ -4,17 +4,22 @@ struct Connxret{
     output_lengths:*const std::ffi::c_longlong,
     logits:*mut std::ffi::c_void,
 }
+#[repr(C)]
+struct OnnxModle{
+    onnxmodle:*mut std::ffi::c_void,
+
+}
 extern "C"{
-    fn connxmodleRun( input_lengths:std::ffi::c_longlong,x_length:std::ffi::c_longlong,x:*const u8)->Connxret;
+    /// # connxmodleinit  
+    /// 初始化模型
+    /// 其中使用了 new建立 所以会内存泄漏，虽然一时 间还未曾想到解决方法但是，记录一下
+    fn connxmodleinit()->OnnxModle; 
+    fn connxmodleRun( modle:&OnnxModle ,input_lengths:std::ffi::c_longlong,x_length:std::ffi::c_longlong,x:*const u8)->Connxret;
 }
 pub mod ocr{
     use opencv::prelude::{MatTraitConstManual, Boxed};
 
-    use crate::{ connxmodleRun};
-    struct OnnxModle{
-        
-
-    }
+    use crate::{ connxmodleRun, OnnxModle,connxmodleinit};
     //impl onnxmodle{
     //    fn new()->onnxmodle{
     //        let env=onnxruntime::environment::Environment::builder()
@@ -29,6 +34,7 @@ pub mod ocr{
     //}
     pub struct Ocr{
         ctc_data:Vec<char>,
+        modle:OnnxModle,
     }
     impl Ocr {
         pub fn new()->Ocr{
@@ -43,9 +49,12 @@ pub mod ocr{
                     }
                 }
             }
-
-            Ocr{
-                ctc_data:data,
+            unsafe{
+                let retm=connxmodleinit();
+                return Ocr{
+                    ctc_data:data,
+                    modle:retm,
+                }
             }
         }
     }
@@ -99,13 +108,13 @@ pub mod ocr{
                 let ratio=32.0/imgrow as f64;
                 let _sz=opencv::core::Size::new(ratio as i32, 32);
                 opencv::imgproc::resize(&img,&mut imgmat,opencv::core::Size::default(), ratio , ratio,  0).unwrap();
-                println!("copyto modle imgsize({},{})",imgmat.cols(),imgmat.rows());//测试将进入模型的数据是否高度为32
+                //println!("copyto modle imgsize({},{})",imgmat.cols(),imgmat.rows());//测试将进入模型的数据是否高度为32
                 let mut  matdata;
                 unsafe{
                     let sz=imgmat.size().unwrap();
-                    let ret=connxmodleRun( sz.width as i64,(sz.height*sz.width) as i64, imgmat.data());
+                    let ret=connxmodleRun( &self.modle,sz.width as i64,(sz.height*sz.width) as i64, imgmat.data());
                     let length=*ret.output_lengths;
-                    println!("connx:{}",length);
+                    //println!("connx:{}",length);
                     matdata=opencv::core::Mat::new_rows_cols_with_data(length as i32, 6674, opencv::core::CV_32FC1, ret.logits, 0).unwrap();
                 }
                 
@@ -198,7 +207,7 @@ pub mod ocr{
             
             let imgcol=inimg.cols();
             let imgrow=inimg.rows();
-            println!("img({},{})",imgcol,imgrow);
+            //println!("img({},{})",imgcol,imgrow);
             let mut tmp=opencv::core::Mat::default();
             //let one=opencv::core::Mat::ones(inimg.rows(), inimg.cols(), inimg.typ()).unwrap();
             //let mut myin=opencv::core::Mat::default();
@@ -211,7 +220,7 @@ pub mod ocr{
             for i in 0..(tmpdata.len()/4){
                 splitlinedata.push(tmpdata[i]+tmpdata[i+1]+tmpdata[i+2]+tmpdata[i+3]);
             }
-            println!("splitlinedata:{}:{:?}",splitlinedata.len(),splitlinedata);
+            //println!("splitlinedata:{}:{:?}",splitlinedata.len(),splitlinedata);
             let mut lineforchar=0;
             let mut lineforcharstart=0;
             for i in 0..splitlinedata.len(){

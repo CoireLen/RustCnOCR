@@ -14,7 +14,7 @@ onnxmodle::onnxmodle(/* args */)
   this->num_input_nodes = this->session->GetInputCount();
   std::vector<const char*> input_node_names(this->num_input_nodes);
   this->input_node_names=std::move(input_node_names);
-  printf("Number of inputs = %zu\n", this->num_input_nodes);
+  //printf("Number of inputs = %zu\n", this->num_input_nodes);
   char* input_names[]={"x","input_lengths"};
   for (int i = 0; i < this->num_input_nodes; i++) {
     // print input node names
@@ -61,10 +61,10 @@ std::vector<void*> onnxmodle::run(long long input_length,long long x_length,unsi
   input_tensor_data.push_back(std::move(input_tensor));
   input_tensor_data.push_back(std::move(input_tensor_lengths));
 
-  printf("session->Run input_node_names.len=%d output_node_names.len=%d\n",this->input_node_names.size(),output_node_names.size());
-  for (auto i :output_node_names){
-    printf("output_node_names:%s\n",i);
-  }
+  //printf("session->Run input_node_names.len=%d output_node_names.len=%d\n",this->input_node_names.size(),output_node_names.size());
+  //for (auto i :output_node_names){
+  //  printf("output_node_names:%s\n",i);
+  //}
   // score model & input tensor, get back output tensor
   auto output_tensors = this->session->Run(Ort::RunOptions{nullptr}, input_node_names.data(),input_tensor_data.data() , 2, output_node_names.data(), 2);
   printf("session->Run\n");
@@ -83,15 +83,17 @@ std::vector<void*> onnxmodle::run(long long input_length,long long x_length,unsi
 onnxmodle::~onnxmodle()
 {
   printf("session delete\n");
-  //delete this->session;
+  delete this->session;
 }
-
-extern "C" struct connxret connxmodleRun(long long input_lengths,long long x_length,unsigned char * x){
-  //onnxmodle *modle=(onnxmodle *)connxmodle->onnxmodle;
-  printf("input_lengths:%d\nx_length:%d\nx:%X\n",input_lengths,x_length,x);
-  printf("input no error\n");
-  onnxmodle modle;
-  std::vector<void *> ret=modle.run(input_lengths,x_length,x);
-  struct connxret r={(long long *)ret[0],(float *)ret[1]};
+  extern "C" struct connxmodle connxmodleinit(){
+  struct connxmodle ret;
+  onnxmodle*m=new onnxmodle();
+  ret.onnxmodle=(void *)m;
+  return ret;
+ }
+ extern "C" struct connxret connxmodleRun(connxmodle* modle,long long input_lengths,long long x_length,unsigned char * x){
+  onnxmodle *m=(onnxmodle*)modle->onnxmodle;
+    std::vector<void *> ret=m->run(input_lengths,x_length,x);
+    struct connxret r={(long long *)ret[0],(float *)ret[1]};
   return r;
-}
+ }

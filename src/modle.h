@@ -61,4 +61,6 @@ struct connxret{
   long long* output_lengths;
   float* logits;
 };
-extern "C" struct connxret connxmodleRun(long long input_lengths,long long x_length,unsigned char * x);
+
+extern "C" struct connxret connxmodleRun(connxmodle *modle,long long input_lengths,long long x_length,unsigned char * x);
+extern "C" struct connxmodle coonxmodleinit();
