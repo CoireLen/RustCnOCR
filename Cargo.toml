@@ -2,9 +2,17 @@
 name = "RustCnOcr"
 version = "0.1.0"
 edition = "2021"
-
+license = "GPL"
+authors = ["CoireLen<len@coire.cn>"]
+homepage = "https://github.com/CoireLen/RustCnOCR"
+description = "一份来自python cnocr的Rust实现"
+documentation ="https://docs.rs/rustcnocr"
+repository ="https://github.com/CoireLen/RustCnOCR"
+readme = "README.md"
+include=["build.rs","src/modle.cpp","src/modle.h","src/lib.rs"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
+[lib]
+doctest = false
 [dependencies]
 opencv = "0.70.0"
 [build-dependencies]

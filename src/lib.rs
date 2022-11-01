@@ -1,17 +1,17 @@
 #![allow(dead_code, unused_imports)]
-
-struct connxret{
+#[repr(C)]
+struct Connxret{
     output_lengths:*const std::ffi::c_longlong,
     logits:*mut std::ffi::c_void,
 }
 extern "C"{
-    fn connxmodleRun( input_lengths:std::ffi::c_longlong,x_length:std::ffi::c_longlong,x:*const u8)->connxret;
+    fn connxmodleRun( input_lengths:std::ffi::c_longlong,x_length:std::ffi::c_longlong,x:*const u8)->Connxret;
 }
-pub mod Ocr{
+pub mod ocr{
     use opencv::prelude::{MatTraitConstManual, Boxed};
 
     use crate::{ connxmodleRun};
-    struct onnxmodle{
+    struct OnnxModle{
         
 
     }
@@ -27,11 +27,11 @@ pub mod Ocr{
     //        
     //    }
     //}
-    pub struct ocr{
+    pub struct Ocr{
         ctc_data:Vec<char>,
     }
-    impl ocr {
-        pub fn new()->ocr{
+    impl Ocr {
+        pub fn new()->Ocr{
             let mut data=Vec::<char>::new();
             let mut f1=std::fs::File::open("label_cn.txt").unwrap();
             let mut str=String::new();
@@ -44,7 +44,7 @@ pub mod Ocr{
                 }
             }
 
-            ocr{
+            Ocr{
                 ctc_data:data,
             }
         }
@@ -56,7 +56,7 @@ pub mod Ocr{
         fn line_split(&self,inimg:opencv::core::Mat)->Vec<opencv::core::Mat>;
         fn ctc_best(&self,data:Vec<usize>)->String;
     }
-    impl OcrTraitConst for ocr{
+    impl OcrTraitConst for Ocr{
         fn from_mat(&self,imgdata:opencv::core::Mat)->Vec<(String,f32)>{
             use opencv::prelude::MatTraitConst;
             use opencv::core::prelude::*;
@@ -93,11 +93,11 @@ pub mod Ocr{
             use opencv::prelude::MatTraitConst;
             use opencv::core::prelude::*;
             for img in inimgs{
-                let imgcol=img.cols();
+                let _imgcol=img.cols();
                 let imgrow=img.rows();
                 let mut imgmat=opencv::core::Mat::default();
                 let ratio=32.0/imgrow as f64;
-                let sz=opencv::core::Size::new(ratio as i32, 32);
+                let _sz=opencv::core::Size::new(ratio as i32, 32);
                 opencv::imgproc::resize(&img,&mut imgmat,opencv::core::Size::default(), ratio , ratio,  0).unwrap();
                 println!("copyto modle imgsize({},{})",imgmat.cols(),imgmat.rows());//测试将进入模型的数据是否高度为32
                 let mut  matdata;
