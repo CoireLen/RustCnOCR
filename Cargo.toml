@@ -2,7 +2,7 @@
 name = "cnocr_rs"
 version = "0.1.0"
 edition = "2021"
-license = "GPL"
+license = "GPL-3.0-only"
 authors = ["CoireLen<len@coire.cn>"]
 homepage = "https://github.com/CoireLen/RustCnOCR"
 description = "一份来自python cnocr的Rust实现"
