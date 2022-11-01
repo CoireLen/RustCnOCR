@@ -83,17 +83,15 @@ std::vector<void*> onnxmodle::run(long long input_length,long long x_length,unsi
 onnxmodle::~onnxmodle()
 {
   printf("session delete\n");
-  delete this->session;
+  //delete this->session;
 }
-extern "C" struct connxmodle connxmodleInit(){
-  struct connxmodle ret={new onnxmodle()};
-  return ret;
-}
-extern "C" struct connxret connxmodleRun(struct connxmodle* connxmodle ,long long input_lengths,long long x_length,unsigned char * x){
-  onnxmodle *modle=(onnxmodle *)connxmodle->onnxmodle;
+
+extern "C" struct connxret connxmodleRun(long long input_lengths,long long x_length,unsigned char * x){
+  //onnxmodle *modle=(onnxmodle *)connxmodle->onnxmodle;
   printf("input_lengths:%d\nx_length:%d\nx:%X\n",input_lengths,x_length,x);
   printf("input no error\n");
-  std::vector<void *> ret=modle->run(input_lengths,x_length,x);
+  onnxmodle modle;
+  std::vector<void *> ret=modle.run(input_lengths,x_length,x);
   struct connxret r={(long long *)ret[0],(float *)ret[1]};
   return r;
 }
