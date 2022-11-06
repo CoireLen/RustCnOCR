@@ -58,6 +58,29 @@ pub mod ocr{
             }
         }
     }
+    fn softmax( matdata:opencv::core::Mat)->opencv::core::Mat{
+        use opencv::prelude::MatTraitConst;
+        use opencv::prelude::MatExprTraitConst;
+        use opencv::core::prelude::*;
+        //let mut sum=0.0;
+        let mut ncdata=opencv::core::Mat::default();
+        for i in 0..matdata.rows(){
+            let mut tmp=matdata.row(i).unwrap();
+            let mut out=opencv::core::Mat::default();
+            opencv::core::reduce(&tmp, &mut out, 0, opencv::core::REDUCE_MAX, -1).unwrap();
+            let maxvec:Vec<Vec<f32>>=out.to_vec_2d().unwrap();
+            let max=maxvec[0][0] as f64;
+            let one=opencv::core::Mat::ones(tmp.rows(), tmp.cols(), opencv::core::CV_32FC1).unwrap();
+            if let opencv::core::MatExprResult::Ok(x)=tmp.clone()-max*one{
+                opencv::core::exp(&x, &mut tmp).unwrap();
+            }
+            let sum=opencv::core::sum_elems(&tmp).unwrap();
+            if let  opencv::core::MatExprResult::Ok(x)=tmp.clone()/sum[0] {
+                ncdata.push_back(&x.to_mat().unwrap()).unwrap();
+            }
+        }
+        ncdata
+    }
     pub trait OcrTraitConst {
         fn from_mat(&self,imgdata:opencv::core::Mat)->Vec<(String,f32)>;
         fn from_path(&self,path:String)->Vec<(String,f32)>;
@@ -119,48 +142,7 @@ pub mod ocr{
                 }
                 
                 //接下来用softmax处理信息
-                //for i in 0..matdata.rows(){
-                //    let mut ncdata=matdata.row(i).unwrap();
-                //    let mut tmat =opencv::core::Mat::default();
-                //    opencv::core::reduce_arg_max(&ncdata, &mut tmat, 1, false).unwrap();
-                //    let ncdata2d:Vec<Vec<f32>>=ncdata.to_vec_2d().unwrap();
-                //    let tmat2d:Vec<Vec<i32>>=tmat.to_vec_2d().unwrap();
-                //    let t=tmat2d[0][0];
-                //    println!("ncdata2d:{:?}\ntmat2d:{:?}\nt:{}",ncdata2d,tmat2d,t);
-                //    let one=opencv::core::Mat::ones(ncdata.rows(), ncdata.cols(), ncdata.typ()).unwrap();
-                //    let mut src=opencv::core::Mat::default();
-                //    if let opencv::core::MatExprResult::Ok(x)=(ncdata.clone()-one*t as f64){
-                //        src=x.to_mat().unwrap();
-                //    }
-                //    opencv::core::exp(&src, &mut ncdata).unwrap();
-                //    let t1=opencv::core::sum_elems(&ncdata).unwrap()[0];
-                //    let one=opencv::core::Mat::ones(ncdata.rows(), ncdata.cols(), ncdata.typ()).unwrap();
-                //    if let opencv::core::MatExprResult::Ok(x)=ncdata/(one *t1){
-                //        ncdata=x.to_mat().unwrap();
-                //    }
-                //}
-                let mut max=0.0;
-                let mut min=0.0;
-                //let mut sum=0.0;
-                let data:&[f32]=matdata.data_typed().unwrap();
-                for i in data{
-                    if *i>max{
-                        max=*i;
-                    }
-                    if *i<min{
-                        min=*i;
-                    }
-                }
-                let mut tmpmat=opencv::core::Mat::default();
-                let one=opencv::core::Mat::ones(matdata.rows(), matdata.cols(), matdata.typ()).unwrap();
-                if let opencv::core::MatExprResult::Ok(x)=matdata.clone()-(one*max as f64){
-                    opencv::core::exp(&x,&mut tmpmat).unwrap();
-                }
-                let tmpsum=opencv::core::sum_elems(&tmpmat).unwrap();
-                if let opencv::core::MatExprResult::Ok(x)=matdata.clone()/tmpsum[0]{
-                    matdata=x.to_mat().unwrap();
-                }
-                
+                matdata=softmax(matdata);
                 
                 //vargmax
                 let mut resvec:Vec<usize>=Vec::new();
@@ -179,16 +161,14 @@ pub mod ocr{
                 //准确率
                 let mut maxmat=opencv::core::Mat::default();
                 let mut minmat=opencv::core::Mat::default();
-                let one=opencv::core::Mat::ones(matdata.rows(), matdata.cols(), matdata.typ()).unwrap().to_mat().unwrap();
-                if let opencv::core::MatExprResult::Ok(x)=(matdata.clone()+(min.abs() as f64)*one.clone())/(((max+min.abs()) as f64)*one.clone()){
-                    maxmat=x.to_mat().unwrap();
-                }
                 
-                opencv::core::reduce(&maxmat, &mut minmat, 1, opencv::core::REDUCE_MIN, -1).unwrap();
-                
+                opencv::core::reduce(&matdata, &mut maxmat, 1, opencv::core::REDUCE_MAX, -1).unwrap();
+                opencv::core::reduce(&maxmat, &mut minmat, 0, opencv::core::REDUCE_MIN, -1).unwrap();
+                //println!("minmat.size:{},{}",minmat.cols(),minmat.rows());
                 //匹配数据ctcbest
                 let retstr=self.ctc_best(resvec);
                 let min2d:&[f32]=minmat.data_typed().unwrap();
+                println!("minmat size:{:?}",minmat.size().unwrap());
                 res.push((retstr,min2d[0]));
             }
            
@@ -209,11 +189,7 @@ pub mod ocr{
             let imgrow=inimg.rows();
             //println!("img({},{})",imgcol,imgrow);
             let mut tmp=opencv::core::Mat::default();
-            //let one=opencv::core::Mat::ones(inimg.rows(), inimg.cols(), inimg.typ()).unwrap();
-            //let mut myin=opencv::core::Mat::default();
-            //if let opencv::core::MatExprResult::Ok(x)=(255f64*one)-inimg.clone(){
-            //    myin=x.to_mat().unwrap();
-            //}
+
             opencv::core::reduce_arg_min(&inimg, &mut tmp, 1, false).unwrap();
             let tmpdata=tmp.data_bytes().unwrap();
             let mut splitlinedata:Vec<u8>=Vec::new();
