@@ -63,4 +63,5 @@ struct connxret{
 };
 
 extern "C" struct connxret connxmodleRun(connxmodle *modle,long long input_lengths,long long x_length,unsigned char * x);
-extern "C" struct connxmodle coonxmodleinit();
+extern "C" struct connxmodle connxmodleInit();
+extern "C" void connxmodleRelease(connxmodle *modle);

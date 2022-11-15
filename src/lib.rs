@@ -12,29 +12,26 @@ struct OnnxModle{
 extern "C"{
     /// # connxmodleinit  
     /// 初始化模型
-    /// 其中使用了 new建立 所以会内存泄漏，虽然一时 间还未曾想到解决方法但是，记录一下
-    fn connxmodleinit()->OnnxModle; 
+    fn connxmodleInit()->OnnxModle; 
     fn connxmodleRun( modle:&OnnxModle ,input_lengths:std::ffi::c_longlong,x_length:std::ffi::c_longlong,x:*const u8)->Connxret;
+    fn connxmodleRelease( modle:&OnnxModle );
 }
 pub mod ocr{
     use opencv::prelude::{MatTraitConstManual, Boxed};
 
-    use crate::{ connxmodleRun, OnnxModle,connxmodleinit};
-    //impl onnxmodle{
-    //    fn new()->onnxmodle{
-    //        let env=onnxruntime::environment::Environment::builder()
-    //        .with_name("test").with_log_level(onnxruntime::LoggingLevel::Error)
-    //        .build().unwrap();
-    //        let mut session=env.new_session_builder().unwrap()
-    //        .with_optimization_level(onnxruntime::GraphOptimizationLevel::Basic).unwrap()
-    //        .with_number_threads(1).unwrap()
-    //        .with_model_from_file("").unwrap();
-    //        
-    //    }
-    //}
+    use crate::{ connxmodleRun, OnnxModle,connxmodleInit,connxmodleRelease};
+
     pub struct Ocr{
         ctc_data:Vec<char>,
         modle:OnnxModle,
+    }
+    impl core::ops::Drop for Ocr {
+        fn drop(&mut self) {
+            println!("删除cnocr cpp调用");
+            unsafe{
+                connxmodleRelease(&self.modle);
+            }
+        }
     }
     impl Ocr {
         pub fn new()->Ocr{
@@ -50,7 +47,7 @@ pub mod ocr{
                 }
             }
             unsafe{
-                let retm=connxmodleinit();
+                let retm=connxmodleInit();
                 return Ocr{
                     ctc_data:data,
                     modle:retm,
@@ -89,9 +86,11 @@ pub mod ocr{
         fn ctc_best(&self,data:Vec<usize>)->String;
     }
     impl OcrTraitConst for Ocr{
-        /// # 从opencv Mat识别文字
-        /// > 输入： 因该是一个RGB彩色图片
-        /// 输出 识别出来的文字 和 准确率
+        /**
+        # 从opencv Mat识别文字
+        > 输入： 因该是一个RGB彩色图片
+        输出 识别出来的文字 和 准确率
+        */
         fn from_mat(&self,imgdata:opencv::core::Mat)->Vec<(String,f32)>{
             use opencv::prelude::MatTraitConst;
             use opencv::core::prelude::*;
@@ -115,17 +114,21 @@ pub mod ocr{
             res=self.ocr_for_single_lines(imgs);
             res
         }
-        /// # 从文件路径 读取图片 识别文字
-        /// > 输入： 因该是 图片文件路径
-        /// 输出 识别出来的文字 和 准确率
+        /**
+        # 从文件路径 读取图片 识别文字
+        > 输入： 因该是 图片文件路径
+        输出 识别出来的文字 和 准确率
+        */
         fn from_path(&self,path:String)->Vec<(String,f32)>{
             use opencv::prelude::MatTraitConst;
             let inimg =opencv::imgcodecs::imread(path.as_str(), opencv::imgcodecs::IMREAD_COLOR).unwrap();
             return self.from_mat(inimg);
         }
-        /// # 识别单行文字
-        /// > 输入： 因该是一组 切分好行 的 opencv Mat 格式
-        /// 输出 识别出来的文字 和 准确率
+        /**
+        # 识别单行文字
+        > 输入： 因该是一组 切分好行 的 opencv Mat 格式
+        输出 识别出来的文字 和 准确率
+        */
         fn  ocr_for_single_lines(&self,inimgs:Vec<opencv::core::Mat>)->Vec<(String,f32)>{
             let mut res:Vec<(String,f32)>=Vec::new();
             if inimgs.len()==0{
@@ -183,10 +186,12 @@ pub mod ocr{
            
             res
         }
-        /// # line_split
-        /// > 将黑白图片每行找出最大值，列出竖直列，其中较大部分为文字。将其切分成 图片 每张图片仅只能有一行文字。
-        /// > 所以 输入图片不能有 划线 类似表格等 如有倾斜也会导致无法划分图片切片
-        /// 输出 切分好的 图片 列表
+        /**
+        # line_split
+        > 将黑白图片每行找出最大值，列出竖直列，其中较大部分为文字。将其切分成 图片 每张图片仅只能有一行文字。
+        > 所以 输入图片不能有 划线 类似表格等 如有倾斜也会导致无法划分图片切片
+        输出 切分好的 图片 列表
+        */
         fn line_split(&self,inimg:opencv::core::Mat)->Vec<opencv::core::Mat>{
 
             let mut list:Vec<opencv::core::Mat>=Vec::new();
@@ -257,10 +262,12 @@ pub mod ocr{
             //}
             list
         }
-        /// #合成 文字
-        /// > 输入：文字列表
-        /// > 功能：查询ai模型字典，将列表转换为字符串
-        /// 输出 处理好的 字符串
+        /**
+        #合成 文字
+        > 输入：文字列表
+        > 功能：查询ai模型字典，将列表转换为字符串
+        输出 处理好的 字符串
+        */
         fn ctc_best(&self,data:Vec<usize>)->String{
             let mut res =String::new();
             let mut vui:Vec<usize>=Vec::new();

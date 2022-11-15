@@ -85,11 +85,16 @@ onnxmodle::~onnxmodle()
   printf("session delete\n");
   delete this->session;
 }
-  extern "C" struct connxmodle connxmodleinit(){
+  extern "C" struct connxmodle connxmodleInit(){
   struct connxmodle ret;
   onnxmodle*m=new onnxmodle();
   ret.onnxmodle=(void *)m;
   return ret;
+ }
+ extern "C" void connxmodleRelease(connxmodle *modle){
+  onnxmodle*m=(onnxmodle*)modle->onnxmodle;
+  delete m;
+  modle->onnxmodle=(void *)0;
  }
  extern "C" struct connxret connxmodleRun(connxmodle* modle,long long input_lengths,long long x_length,unsigned char * x){
   onnxmodle *m=(onnxmodle*)modle->onnxmodle;

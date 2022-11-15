@@ -7,7 +7,7 @@
 - onnxruntime 库的原因，暂时仍使用c++代码解决onnxruntime库调用的问题
 > 所以在onnrruntime 可用之前 请clone源码加入项目后编译
 
-- 切换ocr识别语言包
+- 切换ocr识别语言包 (cnocrcpp已实现，有能力的可用抄下改改)
 
 ## 使用演示
 
