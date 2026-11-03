@@ -1,6 +1,6 @@
 [package]
 name = "cnocr_rs"
-version = "0.1.4"
+version = "0.2.0"
 edition = "2021"
 license = "GPL-3.0-only"
 authors = ["CoireLen<len@coire.cn>"]
@@ -9,11 +9,10 @@ description = "一份来自python cnocr的Rust实现"
 documentation ="https://docs.rs/rustcnocr"
 repository ="https://github.com/CoireLen/RustCnOCR"
 readme = "README.md"
-include=["build.rs","src/modle.cpp","src/modle.h","src/lib.rs"]
+include=["src/*.rs", "README.md"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
 doctest = false
 [dependencies]
-opencv = "0.70.0"
-[build-dependencies]
-cc = "1.0"
+ort = "=2.0.0-rc.13"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }
