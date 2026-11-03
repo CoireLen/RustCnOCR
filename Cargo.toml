@@ -16,3 +16,7 @@ doctest = false
 [dependencies]
 ort = "=2.0.0-rc.13"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "gif"] }
+# 模型自动下载：ureq/flate2 已经被 ort 的 download-binaries 拉进依赖树，
+# 这里显式沿用 ort 的 native-tls（Windows 走 schannel），避免引入 rustls/ring 这类需要 C 编译器的后端
+ureq = { version = "3.1", default-features = false, features = ["native-tls"] }
+flate2 = "1"

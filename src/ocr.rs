@@ -12,7 +12,8 @@ use ort::session::builder::GraphOptimizationLevel;
 use ort::session::{Session, SessionInputValue};
 use ort::value::{Tensor, TensorElementType, TensorRef, ValueType};
 
-use crate::model_registry::{dict_path, find_recognizer, model_path, ModelSpec, UseModel};
+use crate::cnstd::{crop_line, CnStd, DetectOptions};
+use crate::model_registry::{dict_path, ensure_model, ModelSpec, UseModel};
 
 /// 单行图送入模型前的最小宽度
 const MIN_LINE_WIDTH: usize = 8;
@@ -100,25 +101,35 @@ pub struct Ocr {
     session: Mutex<Session>,
     plan: IoPlan,
     spec: &'static ModelSpec,
-    blank_index: usize
+    blank_index: usize,
+    /// 文本行检测器；为 `None` 时用投影切分
+    detector: Option<CnStd>,
+    /// 检测切分使用的参数
+    det_options: DetectOptions
+}
+
+/// 识别器配置
+#[derive(Clone, Copy, Debug)]
+pub struct OcrBuilder {
+    model: UseModel,
+    detection: bool,
+    det_options: DetectOptions,
+    auto_download: bool
 }
 
 impl Ocr {
-    /// 使用默认模型（cnocr136fc）
+    /// 使用默认模型（cnocr136fc）与投影切分
     pub fn new() -> Ocr {
-        Ocr::with_model(UseModel::default())
+        Ocr::builder().build()
     }
 
-    /// 使用注册表中的指定模型
-    pub fn with_model(model: UseModel) -> Ocr {
-        Ocr::with_spec(model.spec())
-    }
-
-    /// 按模型名选择，例如 `"ch_PP-OCRv3"`；未知名称会 panic
-    pub fn with_model_name(name: &str) -> Ocr {
-        let spec = find_recognizer(name)
-            .unwrap_or_else(|| panic!("未注册的识别模型: {}（可用名称见 model_registry::RECOGNIZERS）", name));
-        Ocr::with_spec(spec)
+    pub fn builder() -> OcrBuilder {
+        OcrBuilder {
+            model: UseModel::default(),
+            detection: false,
+            det_options: DetectOptions::default(),
+            auto_download: true
+        }
     }
 
     /// 全部可选模型
@@ -131,8 +142,47 @@ impl Ocr {
         self.spec
     }
 
-    fn with_spec(spec: &'static ModelSpec) -> Ocr {
-        let model_file = model_path(spec);
+    /// 是否启用了文本行检测
+    pub fn uses_detection(&self) -> bool {
+        self.detector.is_some()
+    }
+}
+
+impl OcrBuilder {
+    /// 选择识别模型
+    pub fn model(mut self, model: UseModel) -> Self {
+        self.model = model;
+        self
+    }
+
+    /// 按模型名选择，例如 `"ch_PP-OCRv3"`；未知名称会 panic
+    pub fn model_name(mut self, name: &str) -> Self {
+        self.model = UseModel::from_name(name)
+            .unwrap_or_else(|| panic!("未注册的识别模型: {}（可用名称见 model_registry::RECOGNIZERS）", name));
+        self
+    }
+
+    /// 是否先用 PP-OCRv3 检测模型切分文本行（适合倾斜、场景图），关闭后使用投影切分
+    pub fn detection(mut self, enabled: bool) -> Self {
+        self.detection = enabled;
+        self
+    }
+
+    /// 文本行检测参数，仅在 `detection(true)` 时生效
+    pub fn detection_options(mut self, options: DetectOptions) -> Self {
+        self.det_options = options;
+        self
+    }
+
+    /// 本地找不到模型文件时是否从镜像自动下载（默认开启）
+    pub fn auto_download(mut self, enabled: bool) -> Self {
+        self.auto_download = enabled;
+        self
+    }
+
+    pub fn build(self) -> Ocr {
+        let spec = self.model.spec();
+        let model_file = ensure_model(spec, self.auto_download);
         let session = Session::builder()
             .expect("创建 onnxruntime 会话失败")
             .with_optimization_level(GraphOptimizationLevel::Level2)
@@ -147,10 +197,13 @@ impl Ocr {
         }
         // cnocr 自训练模型把 blank 放在最后一类；PaddleOCR 系模型 blank 为第 0 类
         let blank_index = if spec.blank_index < 0 { dict.len() } else { spec.blank_index as usize };
+        let detector = if self.detection { Some(CnStd::with_auto_download(self.auto_download)) } else { None };
 
-        Ocr { dict, session: Mutex::new(session), plan, spec, blank_index }
+        Ocr { dict, session: Mutex::new(session), plan, spec, blank_index, detector, det_options: self.det_options }
     }
+}
 
+impl Ocr {
     /// 把单行灰度图缩放并归一化成模型输入（CHW 排列）
     fn prepare_line_image(&self, line: &GrayImage) -> (Vec<f32>, usize) {
         let height = self.spec.height;
@@ -237,6 +290,18 @@ impl Ocr {
         }
         (self.ctc_best(&argmax), confidence)
     }
+
+    /// 切分文本行：启用检测模型时按文本框透视裁剪，否则用反色投影切分
+    fn split_lines(&self, gray: &GrayImage) -> Vec<GrayImage> {
+        match &self.detector {
+            Some(detector) => detector
+                .detect(gray, &self.det_options)
+                .iter()
+                .filter_map(|line| crop_line(gray, line))
+                .collect(),
+            None => self.line_split(gray)
+        }
+    }
 }
 
 impl Default for Ocr {
@@ -273,7 +338,7 @@ impl OcrTraitConst for Ocr {
                 *p = 255 - *p;
             }
         }
-        let imgs = self.line_split(&gray);
+        let imgs = self.split_lines(&gray);
         self.ocr_for_single_lines(&imgs)
     }
     /**
@@ -387,6 +452,15 @@ mod tests {
         for (_, confidence) in &lines {
             assert!(*confidence > 0.4 && *confidence <= 1.0, "置信度超出范围: {}", confidence);
         }
+    }
+
+    /// 同一张图，改用 PP-OCRv3 检测模型切分文本行（需要 `ch_PP-OCRv3_det_infer.onnx`）
+    #[test]
+    fn recognizes_sample_image_with_detection() {
+        let lines = Ocr::builder().detection(true).build().from_path("cnocr.png");
+        assert_eq!(lines.len(), 2, "示例图片应有两行文字");
+        assert!(lines[0].0.contains("V2.1.2之后"), "第一行识别结果异常: {}", lines[0].0);
+        assert!(lines[1].0.contains("ONNX版本"), "第二行识别结果异常: {}", lines[1].0);
     }
 
     #[test]

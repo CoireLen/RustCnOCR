@@ -1,10 +1,13 @@
 //! 识别模型清单与本地文件定位，参考 CnocrCpp 的 `model_registry.h/.cpp`。
 //!
 //! 模型文件依次查找 `modle/`、当前目录、缓存目录（`CNOCR_HOME`，未设置时 Windows 用
-//! `%APPDATA%\cnocr`、其他平台用 `~/.cnocr`，再拼上 `models`）；字典文件只查找 `dict/` 和当前目录。
-//! 本 crate 只做识别，不含 CnocrCpp 的 PP-OCRv3 文本行检测（`cnstd`），也不会联网下载模型。
+//! `%APPDATA%\cnocr`、其他平台用 `~/.cnocr`，再拼上 `models`）；本地都没有时可以从
+//! `breezedeus/cnstd-cnocr-models` 自动下载到缓存目录（见 [`crate::download`]）。
+//! 字典文件只查找 `dict/` 和当前目录，镜像仓库不提供字典。
 
 use std::path::PathBuf;
+
+use crate::download;
 
 /// 单个识别模型的推理参数与配套文件
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,6 +26,10 @@ pub struct ModelSpec {
     pub dict_file: &'static str,
     /// 模型用途说明
     pub description: &'static str,
+    /// 自动下载时模型压缩包在仓库里的子目录，例如 `models/cnocr/2.3`
+    pub subfolder: &'static str,
+    /// 自动下载使用的压缩包名；为空表示没有可下载的包
+    pub archive: &'static str,
 }
 
 /// 全部可用的识别模型
@@ -34,7 +41,9 @@ pub const RECOGNIZERS: &[ModelSpec] = &[
         blank_index: -1,
         onnx_file: "cnocr136fc.onnx",
         dict_file: "label_cn.txt",
-        description: "早期中文识别模型（cnocr 2.2）"
+        description: "早期中文识别模型（cnocr 2.2）",
+        subfolder: "models/cnocr/2.2",
+        archive: "densenet_lite_136-fc-onnx.zip"
     },
     ModelSpec {
         name: "densenet_lite_136-gru",
@@ -43,7 +52,9 @@ pub const RECOGNIZERS: &[ModelSpec] = &[
         blank_index: -1,
         onnx_file: "densenet_lite_136-gru.onnx",
         dict_file: "label_cn_2.3.txt",
-        description: "通用中文识别模型（cnocr 2.3）"
+        description: "通用中文识别模型（cnocr 2.3）",
+        subfolder: "models/cnocr/2.3",
+        archive: "densenet_lite_136-gru-onnx.zip"
     },
     ModelSpec {
         name: "scene-densenet_lite_136-gru",
@@ -52,7 +63,9 @@ pub const RECOGNIZERS: &[ModelSpec] = &[
         blank_index: -1,
         onnx_file: "scene-densenet_lite_136-gru.onnx",
         dict_file: "label_cn_2.3.txt",
-        description: "场景文字识别模型（cnocr 2.3）"
+        description: "场景文字识别模型（cnocr 2.3）",
+        subfolder: "models/cnocr/2.3",
+        archive: "scene-densenet_lite_136-gru-onnx.zip"
     },
     ModelSpec {
         name: "doc-densenet_lite_136-gru",
@@ -61,7 +74,9 @@ pub const RECOGNIZERS: &[ModelSpec] = &[
         blank_index: -1,
         onnx_file: "doc-densenet_lite_136-gru.onnx",
         dict_file: "label_cn_2.3.txt",
-        description: "文档识别模型（cnocr 2.3）"
+        description: "文档识别模型（cnocr 2.3）",
+        subfolder: "models/cnocr/2.3",
+        archive: "doc-densenet_lite_136-gru-onnx.zip"
     },
     ModelSpec {
         name: "number-densenet_lite_136-fc",
@@ -70,7 +85,9 @@ pub const RECOGNIZERS: &[ModelSpec] = &[
         blank_index: -1,
         onnx_file: "number-densenet_lite_136-fc.onnx",
         dict_file: "label_number.txt",
-        description: "数字识别模型（cnocr 2.3）"
+        description: "数字识别模型（cnocr 2.3）",
+        subfolder: "models/cnocr/2.3",
+        archive: "number-densenet_lite_136-fc-onnx.zip"
     },
     ModelSpec {
         name: "en_number_mobile_v2.0",
@@ -79,7 +96,9 @@ pub const RECOGNIZERS: &[ModelSpec] = &[
         blank_index: 0,
         onnx_file: "en_number_mobile_v2.0_rec_infer.onnx",
         dict_file: "en_dict.txt",
-        description: "英文数字识别模型（PaddleOCR）"
+        description: "英文数字识别模型（PaddleOCR）",
+        subfolder: "models/cnocr/2.3",
+        archive: "en_number_mobile_v2.0_rec_infer-onnx.zip"
     },
     ModelSpec {
         name: "chinese_cht_PP-OCRv3",
@@ -88,7 +107,9 @@ pub const RECOGNIZERS: &[ModelSpec] = &[
         blank_index: 0,
         onnx_file: "chinese_cht_PP-OCRv3_rec_infer.onnx",
         dict_file: "chinese_cht_dict.txt",
-        description: "繁体中文识别模型（PaddleOCR PP-OCRv3）"
+        description: "繁体中文识别模型（PaddleOCR PP-OCRv3）",
+        subfolder: "models/cnocr/2.3",
+        archive: "chinese_cht_PP-OCRv3_rec_infer-onnx.zip"
     },
     ModelSpec {
         name: "ch_PP-OCRv3",
@@ -97,7 +118,9 @@ pub const RECOGNIZERS: &[ModelSpec] = &[
         blank_index: 0,
         onnx_file: "ch_PP-OCRv3_rec_infer.onnx",
         dict_file: "ppocr_keys_v1.txt",
-        description: "简体中英文识别模型（PaddleOCR PP-OCRv3）"
+        description: "简体中英文识别模型（PaddleOCR PP-OCRv3）",
+        subfolder: "models/cnocr/2.3",
+        archive: "ch_PP-OCRv3_rec_infer-onnx.zip"
     },
     ModelSpec {
         name: "ch_ppocr_mobile_v2.0",
@@ -106,13 +129,33 @@ pub const RECOGNIZERS: &[ModelSpec] = &[
         blank_index: 0,
         onnx_file: "ch_ppocr_mobile_v2.0_rec_infer.onnx",
         dict_file: "ppocr_keys_v1.txt",
-        description: "简体中英文识别模型（PaddleOCR mobile v2.0）"
+        description: "简体中英文识别模型（PaddleOCR mobile v2.0）",
+        subfolder: "models/cnocr/2.3",
+        archive: "ch_ppocr_mobile_v2.0_rec_infer-onnx.zip"
     },
 ];
 
 /// 按模型名查找注册项
 pub fn find_recognizer(name: &str) -> Option<&'static ModelSpec> {
     RECOGNIZERS.iter().find(|spec| spec.name == name)
+}
+
+/// PP-OCRv3 文本行检测模型（对应 CnocrCpp 的 `ensure_det_model`）。
+/// `channels`/`height`/`blank_index` 对检测没有意义，字典文件为空。
+pub const DET_MODEL: ModelSpec = ModelSpec {
+    name: "ch_PP-OCRv3_det",
+    channels: 3,
+    height: 768,
+    blank_index: -1,
+    onnx_file: "ch_PP-OCRv3_det_infer.onnx",
+    dict_file: "",
+    description: "文本行检测模型（PP-OCRv3）",
+    subfolder: "models/cnstd/1.2",
+    archive: "ch_PP-OCRv3_det_infer-onnx.zip",
+};
+
+pub fn det_model_spec() -> &'static ModelSpec {
+    &DET_MODEL
 }
 
 /// 内置识别模型选择，对应 CnocrCpp 的 `cnocr::USE_MODLE`
@@ -131,6 +174,19 @@ pub enum UseModel {
 }
 
 impl UseModel {
+    /// 全部可选模型
+    pub const ALL: [UseModel; 9] = [
+        UseModel::Cnocr136fc,
+        UseModel::DensenetLite136Gru,
+        UseModel::SceneDensenet136Gru,
+        UseModel::DocDensenet136Gru,
+        UseModel::NumberDensenet136Fc,
+        UseModel::EnNumber,
+        UseModel::ChineseCht,
+        UseModel::ChPpOcrV3,
+        UseModel::ChPpOcrMobileV2,
+    ];
+
     /// 模型名（与 [`RECOGNIZERS`] 中的 `name` 一致）
     pub fn name(self) -> &'static str {
         match self {
@@ -149,6 +205,11 @@ impl UseModel {
     pub fn spec(self) -> &'static ModelSpec {
         find_recognizer(self.name())
             .unwrap_or_else(|| panic!("模型注册表缺少 {}，请检查 model_registry.rs", self.name()))
+    }
+
+    /// 按模型名查找，例如 `"ch_PP-OCRv3"`
+    pub fn from_name(name: &str) -> Option<UseModel> {
+        UseModel::ALL.into_iter().find(|model| model.name() == name)
     }
 }
 
@@ -189,16 +250,68 @@ fn locate(file: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
     dirs.iter().map(|dir| dir.join(file)).find(|path| path.is_file())
 }
 
-/// 模型文件路径；缺失时 panic 并列出查找过的位置
+/// 依次查找 `modle/`、当前目录、缓存目录，返回第一个存在的模型文件
+pub fn find_model(spec: &ModelSpec) -> Option<PathBuf> {
+    locate(spec.onnx_file, &[PathBuf::from("modle"), PathBuf::new(), cache_dir()])
+}
+
+/// 模型文件路径；缺失时 panic 并列出查找过的位置（不联网）
 pub fn model_path(spec: &ModelSpec) -> PathBuf {
+    find_model(spec).unwrap_or_else(|| panic_missing(spec, "模型可从镜像自动下载，或手动放到上面列出的目录"))
+}
+
+/// 模型文件路径；本地缺失且 `auto_download` 为真时，从镜像下载压缩包并解包到缓存目录
+pub fn ensure_model(spec: &ModelSpec, auto_download: bool) -> PathBuf {
+    if let Some(path) = find_model(spec) {
+        return path;
+    }
+    if spec.archive.is_empty() {
+        return panic_missing(spec, "该模型没有可自动下载的压缩包，请手动放置");
+    }
+    if !auto_download {
+        return panic_missing(spec, "已关闭自动下载（Ocr::builder().auto_download(true) 可开启）");
+    }
+
     let cache = cache_dir();
-    locate(spec.onnx_file, &[PathBuf::from("modle"), PathBuf::new(), cache.clone()]).unwrap_or_else(|| {
-        panic!(
-            "未找到模型文件 {}，请放到 modle/、当前目录或 {}（模型可从 https://hf-mirror.com/breezedeus/cnstd-cnocr-models 下载）",
-            spec.onnx_file,
-            cache.display()
-        )
-    })
+    if let Err(e) = std::fs::create_dir_all(&cache) {
+        panic!("创建模型缓存目录 {} 失败: {}", cache.display(), e);
+    }
+    let target = cache.join(spec.onnx_file);
+    let mut last_error = String::from("没有可用的下载地址");
+
+    for endpoint in download::download_endpoints() {
+        let url = download::archive_url(&endpoint, spec.subfolder, spec.archive);
+        let zip = cache.join(format!("{}.download", spec.archive));
+        eprintln!("下载模型 {}: {}", spec.name, url);
+        let result = download::download(&url, &zip).and_then(|()| download::extract_onnx(&zip, &target));
+        let _ = std::fs::remove_file(&zip);
+        match result {
+            Ok(()) => {
+                eprintln!("模型已保存到 {}", target.display());
+                return target;
+            }
+            Err(e) => {
+                eprintln!("从 {endpoint} 获取模型失败: {e}");
+                last_error = e;
+            }
+        }
+    }
+
+    panic!(
+        "无法获取模型 {}：{}\n请手动下载后放到 modle/、当前目录或 {}，也可以设 CNOCR_MODEL_ENDPOINT 指向可用的镜像",
+        spec.name,
+        last_error,
+        cache.display()
+    )
+}
+
+fn panic_missing(spec: &ModelSpec, hint: &str) -> PathBuf {
+    panic!(
+        "未找到模型文件 {}，查找过 modle/、当前目录和 {}；{}",
+        spec.onnx_file,
+        cache_dir().display(),
+        hint
+    )
 }
 
 /// 字典文件路径；缺失时 panic 并列出查找过的位置
